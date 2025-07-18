@@ -493,6 +493,19 @@ app.post('/articles', async (req, res) => {
       res.send(result);
     });
 
+    app.get("/users/statistics", async (req, res) => {
+  try {
+    const total = await usersCollection.estimatedDocumentCount();
+    const normal = await usersCollection.countDocuments({ role: "user" });
+    const premium = await usersCollection.countDocuments({ role: "user", premiumTaken: { $exists: true } });
+
+    res.send({ total, normal, premium });
+  } catch (err) {
+    res.status(500).send({ error: "Failed to fetch statistics" });
+  }
+});
+
+
     app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
       const user = await usersCollection.findOne({ email });
