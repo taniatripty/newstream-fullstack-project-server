@@ -1,19 +1,16 @@
 const express = require('express')
 const cors=require('cors')
 //const jwt = require("jsonwebtoken");
-
+const cron = require('node-cron');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express()
 const port = 3000
 require('dotenv').config()
 app.use(cors())
-// app.use(cors({
-//   origin: ['https://newspaper-auth-22b11.web.app'], // ✅ your deployed frontend domain
-//   credentials: true,
-//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-// }));
+app.use(express.json());
 
+
+// 
 //user:newspaper-fullstack-project
 //pass:gMPg4edfeACNTTjt
 
@@ -44,47 +41,7 @@ async function run() {
      
 
 
-//         app.post('/login', async (req, res) => {
-//   const { email } = req.body;
-
-//   // ✅ Make sure user exists
-//   const user = await client.db('newspaperDB').collection('users').findOne({ email });
-
-//   if (!user) {
-//     return res.status(401).send({ error: 'Unauthorized: user not found' });
-//   }
-
-//   // ✅ Create JWT token (valid for 1 day)
-//   const token = jwt.sign(
-//     { email: user.email, role: user.role || 'user' },
-//     process.env.JWT_SECRET,
-//     { expiresIn: '25d' }
-//   );
-
-//   res.send({ token });
-// });
-
-
-// const verifyJWT = (req, res, next) => {
-//   const authHeader = req.headers.authorization;
-
-//   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-//     return res.status(401).send({ error: "Unauthorized: No token" });
-//   }
-
-//   const token = authHeader.split(" ")[1];
-
-//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-//     if (err) {
-//       return res.status(403).send({ error: "Forbidden: Invalid token" });
-//     }
-
-//     req.user = decoded; // attach email, role, etc.
-//     next();
-//   });
-// };
-
-       
+        
   // GET /publishers
 app.get("/publishers", async (req, res) => {
   const publishers = await publisherCollection.find().toArray();
@@ -97,15 +54,27 @@ app.get("/publishers", async (req, res) => {
   const result = await publisherCollection .insertOne(publisher);
   res.send(result);
 });
-      app.get('/articles', async (req, res) => {
-  try {
+//       app.get('/articles', async (req, res) => {
+//   try {
    
-    const articles = await articlesCollection.find().sort({ created_at: -1 }).toArray();
-    res.send(articles);
-  } catch (err) {
-    res.status(500).send({ error: 'Failed to fetch articles' });
+//     const articles = await articlesCollection.find().sort({ created_at: -1 }).toArray();
+//     res.send(articles);
+//   } catch (err) {
+//     res.status(500).send({ error: 'Failed to fetch articles' });
+//   }
+// });
+app.get("/articles", async (req, res) => {
+  let query = {};
+
+  if (req.query.email) {
+    query.email = req.query.email; // or use `query.email = ...` based on your schema
   }
+
+  const articles = await articlesCollection.find(query).toArray(); // ✅ always return array
+  res.send(articles);
 });
+
+
 
 app.patch('/articles/approve/:id', async (req, res) => {
   try {
@@ -320,16 +289,42 @@ app.patch('/articles/premium/:id', async (req, res) => {
   }
 });
 
+// app.patch("/users/premium", async (req, res) => {
+//   const { email, premiumTaken } = req.body;
+
+//   try {
+//     const result = await usersCollection.updateOne(
+//       { email },
+//       {
+//         $set: {
+//           premiumTaken: new Date(premiumTaken),
+//           role:'premium user'
+//         },
+//       }
+//     );
+
+//     if (result.modifiedCount > 0) {
+//       res.send({ success: true });
+//     } else {
+//       res.send({ success: false, message: "User not found or not updated" });
+//     }
+//   } catch (error) {
+//     res.status(500).send({ error: error.message });
+//   }
+// });
+
 app.patch("/users/premium", async (req, res) => {
-  const { email, premiumTaken } = req.body;
+  const { email, durationMinutes } = req.body;
+
+  const expiryDate = new Date(Date.now() + durationMinutes * 60 * 1000); // duration in minutes
 
   try {
     const result = await usersCollection.updateOne(
       { email },
       {
         $set: {
-          premiumTaken: new Date(premiumTaken),
-          role:'premium user'
+          premiumTaken: expiryDate,
+          role: "premium user",
         },
       }
     );
@@ -343,6 +338,31 @@ app.patch("/users/premium", async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
+
+cron.schedule("* * * * *", async () => {
+  const now = new Date();
+
+  try {
+    const expiredUsers = await usersCollection.find({
+      role: "premium user",
+      premiumTaken: { $lte: now }
+    }).toArray();
+
+    for (const user of expiredUsers) {
+      await usersCollection.updateOne(
+        { _id: new ObjectId(user._id) },
+        {
+          $unset: { premiumTaken: "" },
+          $set: { role: "normal user" }
+        }
+      );
+      console.log(`Downgraded premium user: ${user.email}`);
+    }
+  } catch (err) {
+    console.error("Error during cron job:", err);
+  }
+});
+
 app.get("/article/:id", async (req, res) => {
   try {
     const article = await articlesCollection.findOne({
@@ -357,13 +377,73 @@ app.get("/article/:id", async (req, res) => {
 });
 
 
-    app.post('/articles',async(req,res)=>{
-      const article=req.body;
-      const result=await articlesCollection.insertOne(article);
-      res.send(result)
-
-    })
+    //
     
+//     app.post('/articles', async (req, res) => {
+//   const article = req.body;
+//   const userEmail = article.email;
+
+//   try {
+//     // Step 1: Get the user info from usersCollection
+//     const user = await usersCollection.findOne({ email: userEmail });
+
+//     if (!user) {
+//       return res.status(404).json({ message: 'User not found' });
+//     }
+
+//     // Step 2: If the user is a normal user, check if they already have an article
+//     if (user.role === 'user') {
+//       const existing = await articlesCollection.findOne({ email: userEmail });
+//       if (existing) {
+//         return res.status(403).json({
+//           message: 'Normal users can only publish 1 article. Upgrade to premium for unlimited posting.',
+//         });
+//       }
+//     }
+
+//     // Step 3: If user is premium or hasn't published yet, insert the article
+//     const result = await articlesCollection.insertOne(article);
+//     res.status(201).json({ message: 'Article published successfully', result });
+
+//   } catch (err) {
+//     console.error('Error inserting article:', err);
+//     res.status(500).json({ message: 'Server error', error: err.message });
+//   }
+// });
+
+app.post('/articles', async (req, res) => {
+  const article = req.body;
+
+  const user = await usersCollection.findOne({ email: article.email });
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  const now = new Date();
+
+  // Check premium expiration:
+  const hasValidPremium =
+    user.role === "premium user" &&
+    user.premiumTaken &&
+    new Date(user.premiumTaken) > now;
+
+  if (!hasValidPremium) {
+    // User is either normal user or premium expired — apply normal user restrictions
+    const existingArticle = await articlesCollection.findOne({ email: article.email });
+    if (existingArticle) {
+      return res.status(403).json({
+        message: "Normal users can only publish 1 article. Upgrade to premium for unlimited posting."
+      });
+    }
+  }
+
+  // Otherwise, user is premium with valid premiumTaken => allow posting unlimited
+  const result = await articlesCollection.insertOne(article);
+  res.send(result);
+});
+
+
      app.patch("/users/admin/:id", async (req, res) => {
       const userId = req.params.id;
       const result = await usersCollection.updateOne(
@@ -375,7 +455,7 @@ app.get("/article/:id", async (req, res) => {
       res.send(result);
     });
 
-     app.get("/users/:email/role", async (req, res) => {
+    app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
       const user = await usersCollection.findOne({ email });
 
@@ -383,9 +463,9 @@ app.get("/article/:id", async (req, res) => {
         return res.status(404).send({ message: "User not found" });
       }
 
-      res.send({ role: user.role || "user" });
+      res.send({ role: user.role });
     });
-      
+
 
     //    app.get("/users", async (req, res) => {
     //   const users = await usersCollection.find().toArray();
@@ -413,17 +493,18 @@ app.get("/article/:id", async (req, res) => {
   res.send(users);
 });
 
-       app.post('/users', async (req, res) => {
-            const email = req.body.email;
-            const userExists = await usersCollection.findOne({ email })
-            if (userExists) {
-                // update last log in
-                return res.status(200).send({ message: 'User already exists', inserted: false });
-            }
-            const user = req.body;
-            const result = await usersCollection.insertOne(user);
-            res.send(result);
-        })
+       app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existing = await usersCollection.findOne(query);
+
+      if (existing) {
+        return res.send({ message: "user already exists", inserted: false });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send({ inserted: true, result });
+    });
 
     // Send a ping to confirm a successful connection
    // await client.db("admin").command({ ping: 1 });
