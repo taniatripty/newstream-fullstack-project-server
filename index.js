@@ -362,8 +362,57 @@ cron.schedule("* * * * *", async () => {
     console.error("Error during cron job:", err);
   }
 });
+// GET /articles/trending
+app.get("/articles/trending", async (req, res) => {
+  try {
+    const trending = await articlesCollection
+      .find()
+      .sort({ points: -1 }) // 🔥 Sort by points
+      .limit(10)
+      .toArray();
+
+    res.send(trending);
+  } catch (error) {
+    console.error("Failed to fetch trending articles", error);
+    res.status(500).send({ message: "Server error" });
+  }
+});
 
 
+// PATCH /article/:id/view
+// PATCH /article/:id/view
+app.patch("/article/:id/view", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await articlesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $inc: {
+          views: 1,
+          points: 2, // 🟢 Increase point by 2 every time
+        },
+      }
+    );
+    res.send(result);
+  } catch (err) {
+    console.error("Error updating view count:", err);
+    res.status(500).send({ message: "Failed to update view count" });
+  }
+});
+
+
+app.get("/article/:id", async (req, res) => {
+  try {
+    const article = await articlesCollection.findOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (!article) return res.status(404).send({ error: "Not found" });
+    res.send(article);
+  } catch {
+    res.status(500).send({ error: "Failed to fetch article" });
+  }
+});
 
 
     //
