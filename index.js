@@ -363,18 +363,7 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-app.get("/article/:id", async (req, res) => {
-  try {
-    const article = await articlesCollection.findOne({
-      _id: new ObjectId(req.params.id),
-    });
 
-    if (!article) return res.status(404).send({ error: "Not found" });
-    res.send(article);
-  } catch {
-    res.status(500).send({ error: "Failed to fetch article" });
-  }
-});
 
 
     //
