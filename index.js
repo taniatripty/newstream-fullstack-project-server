@@ -1,0 +1,445 @@
+const express = require('express')
+const cors=require('cors')
+//const jwt = require("jsonwebtoken");
+
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const app = express()
+const port = 3000
+require('dotenv').config()
+app.use(cors())
+// app.use(cors({
+//   origin: ['https://newspaper-auth-22b11.web.app'], // ✅ your deployed frontend domain
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+// }));
+
+//user:newspaper-fullstack-project
+//pass:gMPg4edfeACNTTjt
+
+
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mos4qzt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
+// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
+
+console.log(process.env.DB_USER)
+
+async function run() {
+  try {
+    // Connect the client to the server	(optional starting in v4.7)
+   //await client.connect();
+     const db = client.db('newspaperDB'); // database name
+        const articlesCollection = db.collection('articles');
+        const usersCollection=db.collection('users')
+        const publisherCollection=db.collection("publishers")
+     
+
+
+//         app.post('/login', async (req, res) => {
+//   const { email } = req.body;
+
+//   // ✅ Make sure user exists
+//   const user = await client.db('newspaperDB').collection('users').findOne({ email });
+
+//   if (!user) {
+//     return res.status(401).send({ error: 'Unauthorized: user not found' });
+//   }
+
+//   // ✅ Create JWT token (valid for 1 day)
+//   const token = jwt.sign(
+//     { email: user.email, role: user.role || 'user' },
+//     process.env.JWT_SECRET,
+//     { expiresIn: '25d' }
+//   );
+
+//   res.send({ token });
+// });
+
+
+// const verifyJWT = (req, res, next) => {
+//   const authHeader = req.headers.authorization;
+
+//   if (!authHeader || !authHeader.startsWith("Bearer ")) {
+//     return res.status(401).send({ error: "Unauthorized: No token" });
+//   }
+
+//   const token = authHeader.split(" ")[1];
+
+//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+//     if (err) {
+//       return res.status(403).send({ error: "Forbidden: Invalid token" });
+//     }
+
+//     req.user = decoded; // attach email, role, etc.
+//     next();
+//   });
+// };
+
+       
+  // GET /publishers
+app.get("/publishers", async (req, res) => {
+  const publishers = await publisherCollection.find().toArray();
+  res.send(publishers);
+});
+
+
+    app.post("/publishers", async (req, res) => {
+  const publisher = req.body;
+  const result = await publisherCollection .insertOne(publisher);
+  res.send(result);
+});
+      app.get('/articles', async (req, res) => {
+  try {
+   
+    const articles = await articlesCollection.find().sort({ created_at: -1 }).toArray();
+    res.send(articles);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to fetch articles' });
+  }
+});
+
+app.patch('/articles/approve/:id', async (req, res) => {
+  try {
+   
+    const { id } = req.params;
+    const result = await articlesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          status: 'approved',
+          postedDate: new Date().toISOString(),
+          declineReason: '',
+        },
+      }
+    );
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to approve article' });
+  }
+});
+app.get('/tags', async (req, res) => {
+  try {
+    const tags = await articlesCollection.aggregate([
+      { $match: { tags: { $exists: true, $ne: [] } } },
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags" } },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+
+    const uniqueTags = tags.map(tag => tag._id);
+    res.send(uniqueTags);
+  } catch (err) {
+    console.error("Error fetching tags:", err);
+    res.status(500).send({ error: "Failed to fetch tags" });
+  }
+});
+
+// ✅ Replaces both old '/articles/approve' and '/articles/approved'
+app.get("/article/approve", async (req, res) => {
+  try {
+    const { title, publisher, tags } = req.query;
+    const filter = { status: "approved" };
+
+    if (title) {
+      // Case-insensitive title search
+      filter.title = { $regex: title, $options: "i" };
+    }
+
+    if (publisher) {
+      filter.publisher = publisher;
+    }
+
+    if (tags) {
+      const tagArray = tags.split(",");
+      filter.tags = { $in: tagArray };
+    }
+
+    const articles = await articlesCollection
+      .find(filter)
+      .sort({ postedDate: -1 })
+      .toArray();
+
+    res.send(articles);
+  } catch (err) {
+    console.error("Error fetching filtered approved articles:", err);
+    res.status(500).send({ error: "Failed to fetch approved articles" });
+  }
+});
+
+
+app.patch('/articles/decline/:id', async (req, res) => {
+  try {
+ 
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Reason is required' });
+    }
+
+    const result = await articlesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          status: 'declined',
+          declineReason: reason,
+        },
+      }
+    );
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to decline article' });
+  }
+});
+
+app.put("/article/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const updateData = req.body;
+
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+      $set: {
+        title: updateData.title,
+        image: updateData.image,
+        description: updateData.description,
+        publisher: updateData.publisher,
+        tags: updateData.tags,
+        status: "pending", // reset to pending on update
+        updated_at: new Date(),
+      },
+    };
+
+    const result = await articlesCollection.updateOne(filter, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ error: "Article not found" });
+    }
+
+    res.send({ message: "Article updated successfully", result });
+  } catch (error) {
+    console.error("Error updating article:", error);
+    res.status(500).send({ error: "Failed to update article" });
+  }
+});
+
+app.patch("/articles/:id", async (req, res) => {
+  const articleId = req.params.id;
+  const updatedData = req.body;
+
+  try {
+    const result = await articlesCollection.updateOne(
+      { _id: new ObjectId(articleId) },
+      {
+        $set: {
+          title: updatedData.title,
+          description: updatedData.description,
+          image: updatedData.image,
+          tags: updatedData.tags,
+          publisher: updatedData.publisher,
+          publisherId: updatedData.publisherId,
+          // You can add more fields here if needed
+        },
+      }
+    );
+
+    res.send(result);
+  } catch (error) {
+    console.error("Error updating article:", error);
+    res.status(500).send({ message: "Failed to update article" });
+  }
+});
+app.delete('/articles/:id', async (req, res) => {
+  try {
+    
+    const { id } = req.params;
+    const result = await articlesCollection.deleteOne({ _id: new ObjectId(id) });
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to delete article' });
+  }
+});
+// GET /articles/premium - fetch all approved AND premium articles
+app.get('/articles/premium', async (req, res) => {
+  try {
+    const premiumArticles = await articlesCollection
+      .find({ status: 'approved', isPremium: true })
+      .sort({ postedDate: -1 }) // optional: newest first
+      .toArray();
+    res.send(premiumArticles);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to fetch premium articles' });
+  }
+});
+
+app.post('/create-payment-intent', async (req, res) => {
+  const { amount } = req.body;
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount,
+    currency: 'usd',
+    payment_method_types: ['card'],
+  });
+
+  res.send({ clientSecret: paymentIntent.client_secret });
+});
+
+app.patch('/articles/premium/:id', async (req, res) => {
+  try {
+   
+    const { id } = req.params;
+    const result = await articlesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { isPremium: true } }
+    );
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: 'Failed to mark article as premium' });
+  }
+});
+    app.get("/articles/approved", async (req, res) => {
+  try {
+   
+
+    const approvedArticles = await articlesCollection
+      .find({ status: "approved" })
+      .sort({ postedDate: -1 }) // optional: newest first
+      .toArray();
+
+    res.send(approvedArticles);
+  } catch (err) {
+    res.status(500).send({ error: "Failed to fetch approved articles" });
+  }
+});
+
+app.patch("/users/premium", async (req, res) => {
+  const { email, premiumTaken } = req.body;
+
+  try {
+    const result = await usersCollection.updateOne(
+      { email },
+      {
+        $set: {
+          premiumTaken: new Date(premiumTaken),
+          role:'premium user'
+        },
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      res.send({ success: true });
+    } else {
+      res.send({ success: false, message: "User not found or not updated" });
+    }
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+app.get("/article/:id", async (req, res) => {
+  try {
+    const article = await articlesCollection.findOne({
+      _id: new ObjectId(req.params.id),
+    });
+
+    if (!article) return res.status(404).send({ error: "Not found" });
+    res.send(article);
+  } catch {
+    res.status(500).send({ error: "Failed to fetch article" });
+  }
+});
+
+
+    app.post('/articles',async(req,res)=>{
+      const article=req.body;
+      const result=await articlesCollection.insertOne(article);
+      res.send(result)
+
+    })
+    
+     app.patch("/users/admin/:id", async (req, res) => {
+      const userId = req.params.id;
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(userId) },
+        {
+          $set: { role: "admin", last_updated: new Date().toISOString() },
+        }
+      );
+      res.send(result);
+    });
+
+     app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+
+      if (!user) {
+        return res.status(404).send({ message: "User not found" });
+      }
+
+      res.send({ role: user.role || "user" });
+    });
+      
+
+    //    app.get("/users", async (req, res) => {
+    //   const users = await usersCollection.find().toArray();
+    //   res.send(users);
+    // });
+    app.get("/users", async (req, res) => {
+  let query = {};
+
+  if (req.query.email) {
+    query.email = req.query.email;
+  }
+
+  // If email is provided, return single user
+  if (query.email) {
+    const user = await usersCollection.findOne(query);
+    if (user) {
+      return res.send(user); // send single user
+    } else {
+      return res.status(404).send({ message: "User not found" });
+    }
+  }
+
+  // If no email is provided, return all users
+  const users = await usersCollection.find(query).toArray();
+  res.send(users);
+});
+
+       app.post('/users', async (req, res) => {
+            const email = req.body.email;
+            const userExists = await usersCollection.findOne({ email })
+            if (userExists) {
+                // update last log in
+                return res.status(200).send({ message: 'User already exists', inserted: false });
+            }
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+
+    // Send a ping to confirm a successful connection
+   // await client.db("admin").command({ ping: 1 });
+    //console.log("Pinged your deployment. You successfully connected to MongoDB!");
+  } finally {
+    // Ensures that the client will close when you finish/error
+   // await client.close();
+  }
+}
+run().catch(console.dir);
+
+
+app.get('/', (req, res) => {
+  res.send('newspaper fullstack website !')
+})
+
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}`)
+})
