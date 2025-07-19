@@ -416,40 +416,7 @@ app.get("/article/:id", async (req, res) => {
 });
 
 
-    //
-    
-//     app.post('/articles', async (req, res) => {
-//   const article = req.body;
-//   const userEmail = article.email;
-
-//   try {
-//     // Step 1: Get the user info from usersCollection
-//     const user = await usersCollection.findOne({ email: userEmail });
-
-//     if (!user) {
-//       return res.status(404).json({ message: 'User not found' });
-//     }
-
-//     // Step 2: If the user is a normal user, check if they already have an article
-//     if (user.role === 'user') {
-//       const existing = await articlesCollection.findOne({ email: userEmail });
-//       if (existing) {
-//         return res.status(403).json({
-//           message: 'Normal users can only publish 1 article. Upgrade to premium for unlimited posting.',
-//         });
-//       }
-//     }
-
-//     // Step 3: If user is premium or hasn't published yet, insert the article
-//     const result = await articlesCollection.insertOne(article);
-//     res.status(201).json({ message: 'Article published successfully', result });
-
-//   } catch (err) {
-//     console.error('Error inserting article:', err);
-//     res.status(500).json({ message: 'Server error', error: err.message });
-//   }
-// });
-
+   
 app.post('/articles', async (req, res) => {
   const article = req.body;
 
