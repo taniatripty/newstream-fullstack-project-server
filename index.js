@@ -519,10 +519,7 @@ app.post('/articles', async (req, res) => {
     });
 
 
-    //    app.get("/users", async (req, res) => {
-    //   const users = await usersCollection.find().toArray();
-    //   res.send(users);
-    // });
+   
     app.get("/users", async (req, res) => {
   let query = {};
 
