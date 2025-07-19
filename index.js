@@ -289,29 +289,7 @@ app.patch('/articles/premium/:id', async (req, res) => {
   }
 });
 
-// app.patch("/users/premium", async (req, res) => {
-//   const { email, premiumTaken } = req.body;
 
-//   try {
-//     const result = await usersCollection.updateOne(
-//       { email },
-//       {
-//         $set: {
-//           premiumTaken: new Date(premiumTaken),
-//           role:'premium user'
-//         },
-//       }
-//     );
-
-//     if (result.modifiedCount > 0) {
-//       res.send({ success: true });
-//     } else {
-//       res.send({ success: false, message: "User not found or not updated" });
-//     }
-//   } catch (error) {
-//     res.status(500).send({ error: error.message });
-//   }
-// });
 
 app.patch("/users/premium", async (req, res) => {
   const { email, durationMinutes } = req.body;
@@ -379,7 +357,7 @@ app.get("/articles/trending", async (req, res) => {
 });
 
 
-// PATCH /article/:id/view
+
 // PATCH /article/:id/view
 app.patch("/article/:id/view", async (req, res) => {
   const { id } = req.params;
