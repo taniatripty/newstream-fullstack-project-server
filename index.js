@@ -351,6 +351,18 @@ cron.schedule("* * * * *", async () => {
     console.error("Error during cron job:", err);
   }
 });
+// Example Express route
+app.get("/user", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const users = await usersCollection.find().skip(skip).limit(limit).toArray();
+  const total = await usersCollection.countDocuments();
+
+  res.send({ users, total });
+});
+
 // GET /articles/trending
 app.get("/articles/trending", async (req, res) => {
   try {
