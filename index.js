@@ -444,7 +444,7 @@ app.post('/articles', async (req, res) => {
     }
   }
 
-  // Otherwise, user is premium with valid premiumTaken => allow posting unlimited
+
   const result = await articlesCollection.insertOne(article);
   res.send(result);
 });
