@@ -54,15 +54,7 @@ app.get("/publishers", async (req, res) => {
   const result = await publisherCollection .insertOne(publisher);
   res.send(result);
 });
-//       app.get('/articles', async (req, res) => {
-//   try {
-   
-//     const articles = await articlesCollection.find().sort({ created_at: -1 }).toArray();
-//     res.send(articles);
-//   } catch (err) {
-//     res.status(500).send({ error: 'Failed to fetch articles' });
-//   }
-// });
+
 app.get("/articles", async (req, res) => {
   let query = {};
 
@@ -74,6 +66,25 @@ app.get("/articles", async (req, res) => {
   res.send(articles);
 });
 
+app.get("/article", async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  let query = {};
+  if (req.query.email) {
+    query.email = req.query.email;
+  }
+
+  const total = await articlesCollection.countDocuments(query);
+  const data = await articlesCollection
+    .find(query)
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  res.send({ total, data });
+});
 
 
 app.patch('/articles/approve/:id', async (req, res) => {
@@ -292,9 +303,9 @@ app.patch('/articles/premium/:id', async (req, res) => {
 
 
 app.patch("/users/premium", async (req, res) => {
-  const { email, durationMinutes } = req.body;
+  const { email, duration } = req.body;
 
-  const expiryDate = new Date(Date.now() + durationMinutes * 60 * 1000); // duration in minutes
+  const expiryDate = new Date(Date.now() + duration * 60 * 1000); // duration in minutes
 
   try {
     const result = await usersCollection.updateOne(
