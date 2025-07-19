@@ -496,8 +496,8 @@ app.post('/articles', async (req, res) => {
     app.get("/users/statistics", async (req, res) => {
   try {
     const total = await usersCollection.estimatedDocumentCount();
-    const normal = await usersCollection.countDocuments({ role: "user" });
-    const premium = await usersCollection.countDocuments({ role: "user", premiumTaken: { $exists: true } });
+    const normal = await usersCollection.countDocuments({ role: "normal user" });
+    const premium = await usersCollection.countDocuments({ role: "premium user", premiumTaken: { $exists: true } });
 
     res.send({ total, normal, premium });
   } catch (err) {
