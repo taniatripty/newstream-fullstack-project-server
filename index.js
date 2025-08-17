@@ -302,10 +302,73 @@ app.patch('/articles/premium/:id', async (req, res) => {
 
 
 
+// app.patch("/users/premium", async (req, res) => {
+//   const { email, duration } = req.body;
+
+//   const expiryDate = new Date(Date.now() + duration * 60 * 1000); // duration in minutes
+
+//   try {
+//     const result = await usersCollection.updateOne(
+//       { email },
+//       {
+//         $set: {
+//           premiumTaken: expiryDate,
+//           role: "premium user",
+//         },
+//       }
+//     );
+
+//     if (result.modifiedCount > 0) {
+//       res.send({ success: true });
+//     } else {
+//       res.send({ success: false, message: "User not found or not updated" });
+//     }
+//   } catch (error) {
+//     res.status(500).send({ error: error.message });
+//   }
+// });
+
+// cron.schedule("* * * * *", async () => {
+//   const now = new Date();
+
+//   try {
+//     const expiredUsers = await usersCollection.find({
+//       role: "premium user",
+//       premiumTaken: { $lte: now }
+//     }).toArray();
+
+//     for (const user of expiredUsers) {
+//       await usersCollection.updateOne(
+//         { _id: new ObjectId(user._id) },
+//         {
+//           $unset: { premiumTaken: "" },
+//           $set: { role: "normal user" }
+//         }
+//       );
+//       console.log(`Downgraded premium user: ${user.email}`);
+//     }
+//   } catch (err) {
+//     console.error("Error during cron job:", err);
+//   }
+// });
+
 app.patch("/users/premium", async (req, res) => {
   const { email, duration } = req.body;
 
-  const expiryDate = new Date(Date.now() + duration * 60 * 1000); // duration in minutes
+  // Validate input
+  if (!email || !duration) {
+    return res.status(400).send({ success: false, message: "Email and duration are required." });
+  }
+
+  let expiryDate;
+
+  if (duration === 1) {
+    // 1 minute (for testing)
+    expiryDate = new Date(Date.now() + 1 * 60 * 1000);
+  } else {
+    // Duration in days
+    expiryDate = new Date(Date.now() + duration * 24 * 60 * 60 * 1000);
+  }
 
   try {
     const result = await usersCollection.updateOne(
@@ -319,38 +382,47 @@ app.patch("/users/premium", async (req, res) => {
     );
 
     if (result.modifiedCount > 0) {
-      res.send({ success: true });
+      res.send({ success: true, message: "User upgraded to premium.", expiryDate });
     } else {
-      res.send({ success: false, message: "User not found or not updated" });
+      res.send({ success: false, message: "User not found or update failed." });
     }
   } catch (error) {
-    res.status(500).send({ error: error.message });
+    console.error("Error upgrading user to premium:", error);
+    res.status(500).send({ success: false, error: error.message });
   }
 });
 
+// =============================
+// Cron Job for Expiry
+// =============================
+// Runs every 1 minute
 cron.schedule("* * * * *", async () => {
   const now = new Date();
 
   try {
-    const expiredUsers = await usersCollection.find({
-      role: "premium user",
-      premiumTaken: { $lte: now }
-    }).toArray();
+    const expiredUsers = await usersCollection
+      .find({
+        role: "premium user",
+        premiumTaken: { $lte: now },
+      })
+      .toArray();
 
     for (const user of expiredUsers) {
       await usersCollection.updateOne(
         { _id: new ObjectId(user._id) },
         {
           $unset: { premiumTaken: "" },
-          $set: { role: "normal user" }
+          $set: { role: "normal user" },
         }
       );
-      console.log(`Downgraded premium user: ${user.email}`);
+      console.log(`✅ Downgraded premium user: ${user.email}`);
     }
   } catch (err) {
-    console.error("Error during cron job:", err);
+    console.error("❌ Error during cron job:", err);
   }
 });
+
+
 // Example Express route
 app.get("/user", async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -379,6 +451,23 @@ app.get("/articles/trending", async (req, res) => {
   }
 });
 
+app.get("/articles/mostreads", async (req, res) => {
+  try {
+    const trending = await articlesCollection
+      .find()
+      .sort({ points: -1 }) // 🔥 Sort by points
+      .limit(6)
+      .toArray();
+
+    res.send(trending);
+  } catch (error) {
+    console.error("Failed to fetch trending articles", error);
+    res.status(500).send({ message: "Server error" });
+  }
+});
+
+
+
 
 
 // PATCH /article/:id/view
@@ -390,7 +479,7 @@ app.patch("/article/:id/view", async (req, res) => {
       {
         $inc: {
           views: 1,
-          points: 2, // 🟢 Increase point by 2 every time
+          points: 2, //  Increase point by 2 every time
         },
       }
     );
