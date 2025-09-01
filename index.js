@@ -43,6 +43,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const publisherCollection = db.collection("publishers");
     const notificationsCollection = db.collection("notifications");
+    const reviewCollection=db.collection('reviews')
 
     // ----------------------------
     // Health / Root
@@ -283,6 +284,82 @@ async function run() {
       );
       res.send(result);
     });
+
+
+    //reviews
+
+    //  app.post("/reviews", async (req, res) => {
+    //   try {
+    //     const review = req.body;
+    //     const result = await reviewCollection.insertOne(review);
+    //     res.send({ success: true, insertedId: result.insertedId });
+    //   } catch (error) {
+    //     res.status(500).send({ success: false, error: error.message });
+    //   }
+    // });
+
+    app.post("/reviews", async (req, res) => {
+  try {
+    const { name, email, rating, review } = req.body;
+
+    if (!email || !rating || !review) {
+      return res.send({ success: false, message: "Missing required fields" });
+    }
+
+    // Find user photo by email
+    const user = await db.collection("users").findOne({ email });
+
+    const newReview = {
+      name,
+      email,
+      // use user.photo if exists
+      image: user?.photo,
+      rating: parseFloat(rating),
+      review,
+      createdAt: new Date(),
+    };
+
+    const result = await reviewCollection.insertOne(newReview);
+
+    res.send({ success: true, insertedId: result.insertedId });
+  } catch (error) {
+    console.error("Error posting review:", error);
+    res.status(500).send({ success: false, error: error.message });
+  }
+});
+
+    //   app.get("/reviews", async (req, res) => {
+    //   try {
+    //     const reviews = await reviewCollection
+    //       .find({})
+    //       .sort({ date: -1 }) // newest first
+    //       .toArray();
+    //     res.send(reviews);
+    //   } catch (error) {
+    //     res.status(500).send({ success: false, error: error.message });
+    //   }
+    // });
+
+    app.get("/reviews", async (req, res) => {
+  try {
+    const reviews = await reviewCollection
+      .find({})
+      .sort({ createdAt: -1 }) // newest first
+      .toArray();
+
+    // Ensure each review has image field if available
+    const reviewsWithImages = reviews.map(r => ({
+      ...r,
+      image: r.image || null, // if no image, keep null
+    }));
+
+    res.send(reviewsWithImages);
+  } catch (error) {
+    console.error("Error fetching reviews:", error);
+    res.status(500).send({ success: false, error: error.message });
+  }
+});
+
 
     // ----------------------------
     // USERS
